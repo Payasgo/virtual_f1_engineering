@@ -1,0 +1,90 @@
+# FreeCAD macro: simplified, editable F1-inspired starter geometry
+# Units: millimetres. X forward, Y lateral, Z upward.
+import FreeCAD as App
+import Part
+from FreeCAD import Vector
+
+doc = App.newDocument("Virtual_F1_Starter")
+
+def box(name, label, length, width, height, x, y, z):
+    shape = Part.makeBox(length, width, height, Vector(x, y, z))
+    obj = doc.addObject("PartDesign::Feature", name)
+    obj.Label = label
+    obj.Shape = shape
+    return obj
+
+def cylinder_y(name, label, radius, width, x, y, z):
+    # Cylinder axis is along Y.
+    shape = Part.makeCylinder(radius, width, Vector(x, y, z), Vector(0, 1, 0))
+    obj = doc.addObject("PartDesign::Feature", name)
+    obj.Label = label
+    obj.Shape = shape
+    return obj
+
+# Main floor / reference plank
+floor = box("Floor", "Floor / reference plank", 3600, 1500, 60, -1800, -750, 80)
+
+# Simplified central body and cockpit surround
+body = box("Body", "Central body / simplified monocoque", 2500, 900, 620, -1200, -450, 250)
+nose = box("Nose", "Nose cone (concept block)", 1250, 420, 220, 700, -210, 420)
+
+# Cockpit opening represented by a dark visual inset (not a true cut-out)
+cockpit = box("Cockpit", "Cockpit opening proxy", 900, 420, 35, -550, -210, 875)
+cockpit.ViewObject.ShapeColor = (0.12, 0.12, 0.12)
+
+# Front wing: main plane and two endplates
+fw = box("FrontWing", "Front wing main plane", 350, 1900, 45, 1550, -950, 170)
+fwe1 = box("FrontEndplateL", "Front wing endplate left", 220, 35, 240, 1450, -950, 100)
+fwe2 = box("FrontEndplateR", "Front wing endplate right", 220, 35, 240, 1450, 915, 100)
+
+# Rear wing support, main plane, and endplates
+rw = box("RearWing", "Rear wing main plane", 260, 1500, 65, -1900, -750, 1250)
+rwe1 = box("RearEndplateL", "Rear wing endplate left", 180, 35, 420, -1940, -750, 1050)
+rwe2 = box("RearEndplateR", "Rear wing endplate right", 180, 35, 420, -1940, 715, 1050)
+
+# Simplified diffuser ramp proxy
+diffuser = box("Diffuser", "Rear diffuser proxy", 850, 1200, 100, -1800, -600, 100)
+
+# Four tyres. Cylinders have their axes along Y; each tyre is a simple solid cylinder.
+# Front axle at X=+1200; rear axle at X=-1200.
+tyre_r = 330
+tyre_w = 300
+for label, x in [("Front", 1200), ("Rear", -1200)]:
+    for side, y0 in [("Left", -930), ("Right", 630)]:
+        t = cylinder_y(label + side + "Tyre", label + " " + side + " tyre", tyre_r, tyre_w, x, y0, tyre_r)
+        t.ViewObject.ShapeColor = (0.08, 0.08, 0.08)
+        h = cylinder_y(label + side + "Hub", label + " " + side + " hub", 170, tyre_w + 4, x, y0 - 2, tyre_r)
+        h.ViewObject.ShapeColor = (0.65, 0.65, 0.68)
+
+# Basic suspension links as cylinders between approximate hardpoints
+def rod(name, p1, p2, radius=22):
+    v1 = Vector(*p1)
+    v2 = Vector(*p2)
+    direction = v2.sub(v1)
+    shape = Part.makeCylinder(radius, direction.Length, v1, direction)
+    obj = doc.addObject("PartDesign::Feature", name)
+    obj.Label = name
+    obj.Shape = shape
+    obj.ViewObject.ShapeColor = (0.75, 0.75, 0.78)
+    return obj
+
+for axle, x in [("Front", 1200), ("Rear", -1200)]:
+    for side, y in [("L", -600), ("R", 600)]:
+        rod(axle + side + "UpperLink", (x, y, 650), (x, y * 1.45, 430), 18)
+        rod(axle + side + "LowerLink", (x - 100, y, 300), (x, y * 1.45, 330), 22)
+
+# Set display colors and visibility
+for obj in doc.Objects:
+    if hasattr(obj, "ViewObject"):
+        if obj.Name not in ["FrontLeftTyre", "FrontRightTyre", "RearLeftTyre", "RearRightTyre",
+                            "FrontLeftHub", "FrontRightHub", "RearLeftHub", "RearRightHub",
+                            "Cockpit", "FrontLeftUpperLink", "FrontRightUpperLink",
+                            "RearLeftUpperLink", "RearRightUpperLink",
+                            "FrontLeftLowerLink", "FrontRightLowerLink",
+                            "RearLeftLowerLink", "RearRightLowerLink"]:
+            obj.ViewObject.ShapeColor = (0.82, 0.84, 0.88)
+
+doc.recompute()
+Gui.activeDocument().activeView().viewAxonometric()
+Gui.activeDocument().activeView().fitAll()
+print("Virtual F1 starter geometry created. Save as F1_Starter.FCStd")

@@ -1,0 +1,12 @@
+parameter,value,unit,description
+mass,800,kg,Illustrative total vehicle mass including driver
+speed,50,m/s,Reference speed for calculations (180 km/h)
+air_density,1.225,kg/m^3,Sea-level standard density assumption
+reference_area,1.5,m^2,Illustrative aerodynamic reference area
+cd,0.90,dimensionless,Illustrative drag coefficient
+cl_downforce,2.50,dimensionless,Positive magnitude for downforce
+wheelbase,3.60,m,Concept wheelbase
+front_weight_fraction,0.45,fraction,Static front axle load fraction
+mu,1.60,dimensionless,Constant illustrative tyre friction coefficient
+cg_height,0.30,m,Illustrative centre-of-gravity height
+track_width,1.60,m,Average track width for simple lateral load-transfer estimate
