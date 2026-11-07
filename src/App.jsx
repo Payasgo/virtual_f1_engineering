@@ -31,7 +31,7 @@ export default function App(){
  const [page,setPage]=useState('home'),[mobile,setMobile]=useState(false),[completed,setCompleted]=useState([]),[lesson,setLesson]=useState(0),[answers,setAnswers]=useState({}),[submitted,setSubmitted]=useState({}),[telemetry,setTelemetry]=useState(null),[lapA,setLapA]=useState('1'),[lapB,setLapB]=useState('2'),[error,setError]=useState(''),[wing,setWing]=useState(24),[speed,setSpeed]=useState(250),[rho,setRho]=useState(1.18),[mass,setMass]=useState(798),[mu,setMu]=useState(1.7),[corner,setCorner]=useState(110),[tyre,setTyre]=useState('medium'),[stint,setStint]=useState(25);
  const [raceDriverNo,setRaceDriverNo]=useState(''),[raceFeed,setRaceFeed]=useState({status:'idle',session:null,drivers:[],samples:[],updatedAt:null,error:''}),[raceAuto,setRaceAuto]=useState(false);
  const lastCarDate=useRef(null),lastFeedKey=useRef('');
- const [sessionYear,setSessionYear]=useState('2025'),[sessionCatalog,setSessionCatalog]=useState([]),[selectedSession,setSelectedSession]=useState('');
+ const [sessionYear,setSessionYear]=useState('2026'),[sessionCatalog,setSessionCatalog]=useState([]),[selectedSession,setSelectedSession]=useState('');
  const [sessionDrivers,setSessionDrivers]=useState([]),[selectedTelemetryDriver,setSelectedTelemetryDriver]=useState('');
  const [sessionLaps,setSessionLaps]=useState([]),[referenceLap,setReferenceLap]=useState(''),[comparisonLap,setComparisonLap]=useState('');
  const [lapComparison,setLapComparison]=useState(null),[telemetryBusy,setTelemetryBusy]=useState(false),[telemetryError,setTelemetryError]=useState('');
