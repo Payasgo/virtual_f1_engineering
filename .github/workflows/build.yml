@@ -2,12 +2,13 @@ name: Build and verify
 
 on:
   push:
-    branches: [master, "feat/**"]
+    branches: [master, "feat/**", "chore/**", "fix/**"]
   pull_request:
     branches: [master]
 
 jobs:
-  build:
+  frontend:
+    name: Frontend production build
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -16,7 +17,21 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Install dependencies
-        run: npm install
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
       - name: Build production bundle
         run: npm run build
+
+  python:
+    name: Python syntax validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile engineering scripts
+        run: python -m compileall -q analysis
