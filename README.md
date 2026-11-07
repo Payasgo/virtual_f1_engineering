@@ -36,3 +36,20 @@ See `examples/sample-obd-session.csv`. Use the sample to try the importer. Expor
 - Comparison overlays align by row index, not by synchronized timestamps. Use captures with matching sample intervals for meaningful comparisons.
 - JSON summary contains per-channel min, max and average; it is a data summary, not a diagnosis.
 - The browser importer does not connect to an OBD-II adapter and cannot validate readings against OEM specifications.
+
+## Motorsport telemetry analysis
+The Telemetry Analysis workspace accepts local CSV exports and plots speed, throttle and brake channels for selected laps. Upload a reference dataset and optionally a comparison dataset. If a file contains a `lap` column, select which lap to display from the dropdown.
+
+### Supported CSV structure
+Required columns: `speed`, `throttle`, `brake`.
+Optional columns: `lap`, `time`, `distance`.
+Common aliases are accepted, including `speed_kmh`, `speed_mph`, `throttle_pct`, `brake_pct`, `lap_number`, `time_s` and `distance_m`. Throttle and brake are expected as percentages from 0–100. Speed unit is inferred from a header containing `mph`; otherwise the display defaults to km/h.
+
+Example: `examples/sample-telemetry.csv`.
+
+### Comparison method and limitations
+- Both datasets are parsed in the browser and are not uploaded to a server.
+- Lap traces are overlaid by sample row index. For a meaningful direct comparison, use aligned sampling intervals and a common distance reference.
+- This first telemetry iteration does not interpolate or time-align laps, identify braking points automatically, calculate sector deltas, or connect to a live logger.
+- CSV channel names and units vary by logger; normalize headers and values before import if needed.
+- The graphs are educational visualizations, not official timing or telemetry data.
