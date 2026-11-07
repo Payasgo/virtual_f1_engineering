@@ -93,12 +93,17 @@ export default function App(){
   setTelemetryBusy(true);setTelemetryError('');setTelemetryNotice('');
   try{
    const rows=await getSessions(sessionYear);
-   const sorted=rows.filter(s=>s.session_key!=null).sort((x,y)=>new Date(y.date_start)-new Date(x.date_start));
+   const now=Date.now();
+   // OpenF1 can publish scheduled sessions and driver entry lists before a race weekend.
+   // Only completed sessions can provide historical laps and car telemetry.
+   const sorted=rows
+    .filter(s=>s.session_key!=null&&s.date_start&&s.date_end&&Number.isFinite(Date.parse(s.date_end))&&Date.parse(s.date_end)<=now)
+    .sort((x,y)=>Date.parse(y.date_start)-Date.parse(x.date_start));
    setSessionCatalog(sorted);
    setSessionDrivers([]);setSelectedTelemetryDriver('');setSessionLaps([]);setLapComparison(null);
    const first=sorted[0]?String(sorted[0].session_key):'';
    setSelectedSession(first);
-   if(!first)setTelemetryNotice('No sessions were returned for this season.');
+   if(!first)setTelemetryNotice(`No completed sessions with historical telemetry were found for ${sessionYear}. Choose an earlier season or retry later. Future scheduled sessions are intentionally excluded.`);
    else await loadDriversForSession(first);
   }catch(err){setTelemetryError(err.message||'Unable to load sessions and drivers.');}
   finally{setTelemetryBusy(false);}
