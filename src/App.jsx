@@ -79,26 +79,40 @@ export default function App(){
  useEffect(()=>{if(page!=='live-session'||!raceAuto)return;loadRaceFeed();const id=setInterval(loadRaceFeed,5000);return()=>clearInterval(id);},[page,raceAuto,loadRaceFeed]);
 
 
+ const loadDriversForSession=async(sessionKey)=>{
+  if(!sessionKey)return [];
+  const rows=await getDrivers(sessionKey);
+  const sorted=rows.sort((x,y)=>String(x.name_acronym||x.full_name||'').localeCompare(String(y.name_acronym||y.full_name||'')));
+  setSessionDrivers(sorted);
+  setSelectedTelemetryDriver(sorted[0]?String(sorted[0].driver_number):'');
+  setSessionLaps([]);setLapComparison(null);
+  if(!sorted.length)setTelemetryNotice('The session loaded, but OpenF1 returned no driver records. Try another session or retry shortly.');
+  return sorted;
+ };
  const loadSessionCatalog=async()=>{
   setTelemetryBusy(true);setTelemetryError('');setTelemetryNotice('');
   try{
    const rows=await getSessions(sessionYear);
-   const sorted=rows.sort((a,b)=>new Date(b.date_start)-new Date(a.date_start));
-   setSessionCatalog(sorted);setSelectedSession(sorted[0]?String(sorted[0].session_key):'');
-   setSessionDrivers([]);setSessionLaps([]);setLapComparison(null);
-   if(!sorted.length)setTelemetryNotice('No sessions were returned for this season.');
-  }catch(err){setTelemetryError(err.message||'Unable to load sessions.');}
+   const now=Date.now();
+   // OpenF1 can publish scheduled sessions and driver entry lists before a race weekend.
+   // Only completed sessions can provide historical laps and car telemetry.
+   const sorted=rows
+    .filter(s=>s.session_key!=null&&s.date_start&&s.date_end&&Number.isFinite(Date.parse(s.date_end))&&Date.parse(s.date_end)<=now)
+    .sort((x,y)=>Date.parse(y.date_start)-Date.parse(x.date_start));
+   setSessionCatalog(sorted);
+   setSessionDrivers([]);setSelectedTelemetryDriver('');setSessionLaps([]);setLapComparison(null);
+   const first=sorted[0]?String(sorted[0].session_key):'';
+   setSelectedSession(first);
+   if(!first)setTelemetryNotice(`No completed sessions with historical telemetry were found for ${sessionYear}. Choose an earlier season or retry later. Future scheduled sessions are intentionally excluded.`);
+   else await loadDriversForSession(first);
+  }catch(err){setTelemetryError(err.message||'Unable to load sessions and drivers.');}
   finally{setTelemetryBusy(false);}
  };
  const loadSessionDrivers=async()=>{
   if(!selectedSession)return;
-  setTelemetryBusy(true);setTelemetryError('');
-  try{
-   const rows=await getDrivers(selectedSession);
-   setSessionDrivers(rows.sort((a,b)=>String(a.name_acronym).localeCompare(String(b.name_acronym))));
-   setSelectedTelemetryDriver(rows[0]?String(rows[0].driver_number):'');
-   setSessionLaps([]);setLapComparison(null);
-  }catch(err){setTelemetryError(err.message||'Unable to load drivers.');}
+  setTelemetryBusy(true);setTelemetryError('');setTelemetryNotice('');
+  try{await loadDriversForSession(selectedSession);}
+  catch(err){setTelemetryError(err.message||'Unable to load drivers.');}
   finally{setTelemetryBusy(false);}
  };
  const loadDriverLaps=async()=>{
@@ -106,7 +120,7 @@ export default function App(){
   setTelemetryBusy(true);setTelemetryError('');
   try{
    const rows=await getLaps(selectedSession,selectedTelemetryDriver);
-   const valid=rows.filter(l=>l.date_start&&Number.isFinite(Number(l.duration))&&Number(l.duration)>0&&!l.is_pit_out_lap&&!l.deleted);
+   const valid=rows.map(l=>({...l,duration:Number(l.lap_duration??l.duration)})).filter(l=>l.date_start&&Number.isFinite(l.duration)&&l.duration>0&&!l.is_pit_out_lap&&!l.deleted);
    valid.sort((a,b)=>Number(a.lap_number)-Number(b.lap_number));
    setSessionLaps(valid);setReferenceLap(valid[0]?String(valid[0].lap_number):'');setComparisonLap(valid[1]?String(valid[1].lap_number):'');
    setLapComparison(null);
@@ -185,8 +199,8 @@ export default function App(){
      <div className="telemetry-controls">
       <label>Season<select value={sessionYear} onChange={e=>{setSessionYear(e.target.value);setSessionCatalog([]);setSelectedSession('');setSessionDrivers([]);setSessionLaps([]);setLapComparison(null);}}>{['2026','2025','2024','2023'].map(y=><option key={y}>{y}</option>)}</select></label>
       <button className="secondary-btn" onClick={loadSessionCatalog} disabled={telemetryBusy}>{telemetryBusy?'Loading…':'Load sessions'}</button>
-      <label>Grand Prix / session<select value={selectedSession} onChange={e=>{setSelectedSession(e.target.value);setSessionDrivers([]);setSessionLaps([]);setLapComparison(null);}} disabled={!sessionCatalog.length}><option value="">Select a session</option>{sessionCatalog.map(s=><option key={s.session_key} value={String(s.session_key)}>{s.country_name} · {s.meeting_name} · {s.session_name} ({s.date_start?.slice(0,10)})</option>)}</select></label>
-      <button className="secondary-btn" onClick={loadSessionDrivers} disabled={!selectedSession||telemetryBusy}>Load drivers</button>
+      <label>Grand Prix / session<select value={selectedSession} onChange={e=>{const key=e.target.value;setSelectedSession(key);setSessionDrivers([]);setSelectedTelemetryDriver('');setSessionLaps([]);setLapComparison(null);setTelemetryNotice('');setTelemetryError('');if(key){setTelemetryBusy(true);getDrivers(key).then(rows=>{const sorted=rows.sort((x,y)=>String(x.name_acronym||x.full_name||'').localeCompare(String(y.name_acronym||y.full_name||'')));setSessionDrivers(sorted);setSelectedTelemetryDriver(sorted[0]?String(sorted[0].driver_number):'');if(!sorted.length)setTelemetryNotice('No driver records were returned for this session.');}).catch(err=>setTelemetryError(err.message||'Unable to load drivers.')).finally(()=>setTelemetryBusy(false));}}} disabled={!sessionCatalog.length}><option value="">Select a session</option>{sessionCatalog.map(s=><option key={s.session_key} value={String(s.session_key)}>{s.country_name} · {s.meeting_name} · {s.session_name} ({s.date_start?.slice(0,10)})</option>)}</select></label>
+      <button className="secondary-btn" onClick={loadSessionDrivers} disabled={!selectedSession||telemetryBusy}>{telemetryBusy?'Loading drivers…':'Reload drivers'}</button>
       <label>Driver<select value={selectedTelemetryDriver} onChange={e=>{setSelectedTelemetryDriver(e.target.value);setSessionLaps([]);setLapComparison(null);}} disabled={!sessionDrivers.length}><option value="">Select a driver</option>{sessionDrivers.map(d=><option key={d.driver_number} value={String(d.driver_number)}>{d.name_acronym} · {d.full_name} · {d.team_name}</option>)}</select></label>
       <button className="secondary-btn" onClick={loadDriverLaps} disabled={!selectedTelemetryDriver||telemetryBusy}>Load laps</button>
       <label>Reference lap<select value={referenceLap} onChange={e=>{setReferenceLap(e.target.value);setLapComparison(null);}} disabled={!sessionLaps.length}><option value="">Lap A</option>{sessionLaps.map(l=><option key={l.lap_number} value={String(l.lap_number)}>Lap {l.lap_number} · {Number(l.duration).toFixed(3)} s</option>)}</select></label>

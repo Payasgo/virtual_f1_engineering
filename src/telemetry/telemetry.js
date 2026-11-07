@@ -22,21 +22,47 @@ export const getLaps = (sessionKey, driverNumber, signal) =>
   request('laps', { session_key: String(sessionKey), driver_number: String(driverNumber) }, signal);
 
 export async function getLapSamples(sessionKey, driverNumber, lap, signal) {
-  if (!lap?.date_start || !Number.isFinite(Number(lap.duration))) {
+  const lapDuration = Number(lap?.lap_duration ?? lap?.duration);
+  if (!lap?.date_start || !Number.isFinite(lapDuration) || lapDuration <= 0) {
     throw new Error('This lap has no valid start timestamp or duration, so its telemetry cannot be queried reliably.');
   }
   const start = new Date(new Date(lap.date_start).getTime() - 250).toISOString();
-  const end = new Date(new Date(lap.date_start).getTime() + Number(lap.duration) * 1000 + 500).toISOString();
+  const end = new Date(new Date(lap.date_start).getTime() + lapDuration * 1000 + 500).toISOString();
   const params = {
     session_key: String(sessionKey),
     driver_number: String(driverNumber),
     'date>': start,
     'date<': end,
   };
-  const [car, location] = await Promise.all([
+  const [car, locationWindow] = await Promise.all([
     request('car_data', params, signal),
-    request('location', params, signal).catch(() => []),
+    // Location is a separate, lower-density stream. Query a wider window because
+    // lap start timestamps can differ slightly from the first recorded GPS sample.
+    request('location', {
+      session_key: String(sessionKey),
+      driver_number: String(driverNumber),
+      'date>': new Date(new Date(lap.date_start).getTime() - 15000).toISOString(),
+      'date<': new Date(new Date(lap.date_start).getTime() + lapDuration * 1000 + 15000).toISOString(),
+    }, signal).catch(() => []),
   ]);
+  let location = locationWindow;
+  // Some session archives do not return location rows for a narrow time query.
+  // Retry by session/driver, then crop locally to this lap's time interval.
+  if (!location.length) {
+    location = await request('location', {
+      session_key: String(sessionKey),
+      driver_number: String(driverNumber),
+    }, signal).catch(() => []);
+  }
+  const lapStartMs = new Date(lap.date_start).getTime();
+  const lapEndMs = lapStartMs + lapDuration * 1000;
+  location = location
+    .filter(p => p.date && Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y)))
+    .filter(p => {
+      const timestamp = new Date(p.date).getTime();
+      return timestamp >= lapStartMs - 1000 && timestamp <= lapEndMs + 1000;
+    })
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
   const samples = car
     .filter(row => Number.isFinite(Number(row.speed)) && row.date)
     .sort((a, b) => new Date(a.date) - new Date(b.date))
@@ -50,14 +76,12 @@ export async function getLapSamples(sessionKey, driverNumber, lap, signal) {
       gear: Number(row.n_gear),
       drs: row.drs,
     }))
-    .filter(row => row.t >= 0 && row.t <= Number(lap.duration) + 0.5);
+    .filter(row => row.t >= 0 && row.t <= lapDuration + 0.5);
   if (samples.length < 2) throw new Error('OpenF1 returned fewer than two car-data samples for this lap.');
   return {
     lap,
     samples: integrateDistance(samples),
-    location: location.filter(p => Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y)))
-      .sort((a, b) => new Date(a.date) - new Date(b.date))
-      .map(p => ({ x: Number(p.x), y: Number(p.y), date: p.date })),
+    location: location.map(p => ({ x: Number(p.x), y: Number(p.y), z: Number(p.z), date: p.date })),
     source: 'OpenF1',
   };
 }
