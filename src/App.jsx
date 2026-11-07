@@ -16,8 +16,8 @@ const aliases = {
 };
 function parseDiagnosticCsv(text){
  const first=(text.split(/\r?\n/).find(x=>x.trim())||'');
- const count=delim=>(first.match(new RegExp(delim===';'?';':delim==='\\t'?'\\t':',','g'))||[]).length;
- const delimiter=[',',';','\\t'].sort((a,b)=>count(b)-count(a))[0].replace('\\t','\t');
+ const count=delim=>first.split(delim).length-1;
+ const delimiter=[',',';','\t'].sort((a,b)=>count(b)-count(a))[0];
  const rows=[]; let row=[], cell='', quoted=false;
  for(let i=0;i<text.length;i++){const c=text[i],n=text[i+1];if(c==='"'&&quoted&&n==='"'){cell+='"';i++;}else if(c==='"'){quoted=!quoted;}else if(c===delimiter&&!quoted){row.push(cell.trim());cell='';}else if((c==='\n'||c==='\r')&&!quoted){if(c==='\r'&&n==='\n')i++;row.push(cell.trim());if(row.some(v=>v!==''))rows.push(row);row=[];cell='';}else cell+=c;}
  row.push(cell.trim());if(row.some(v=>v!==''))rows.push(row);
