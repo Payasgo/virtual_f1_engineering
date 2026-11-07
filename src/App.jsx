@@ -1,6 +1,7 @@
 import React,{useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {Gauge,BookOpen,Activity,Wind,CarFront,Flag,GraduationCap,Menu,X,ChevronRight,ArrowUpRight,CheckCircle2,Upload,Play,Target,Timer,Layers,Lightbulb,Info,Route,Trophy,MapPin,Radio} from 'lucide-react';
 import {LineChart,Line,AreaChart,Area,XAxis,YAxis,Tooltip,CartesianGrid,ResponsiveContainer,BarChart,Bar} from 'recharts';
+import {getSessions,getDrivers,getLaps,getLapSamples,alignLaps,sectorComparison,findBrakingZones,normalizeTrack,parseTelemetryCsv} from './telemetry/telemetry.js';
 
 const nav=[
  {id:'home',label:'Academy overview',icon:Gauge,group:'START HERE'},
@@ -30,6 +31,12 @@ export default function App(){
  const [page,setPage]=useState('home'),[mobile,setMobile]=useState(false),[completed,setCompleted]=useState([]),[lesson,setLesson]=useState(0),[answers,setAnswers]=useState({}),[submitted,setSubmitted]=useState({}),[telemetry,setTelemetry]=useState(null),[lapA,setLapA]=useState('1'),[lapB,setLapB]=useState('2'),[error,setError]=useState(''),[wing,setWing]=useState(24),[speed,setSpeed]=useState(250),[rho,setRho]=useState(1.18),[mass,setMass]=useState(798),[mu,setMu]=useState(1.7),[corner,setCorner]=useState(110),[tyre,setTyre]=useState('medium'),[stint,setStint]=useState(25);
  const [raceDriverNo,setRaceDriverNo]=useState(''),[raceFeed,setRaceFeed]=useState({status:'idle',session:null,drivers:[],samples:[],updatedAt:null,error:''}),[raceAuto,setRaceAuto]=useState(false);
  const lastCarDate=useRef(null),lastFeedKey=useRef('');
+ const [sessionYear,setSessionYear]=useState('2025'),[sessionCatalog,setSessionCatalog]=useState([]),[selectedSession,setSelectedSession]=useState('');
+ const [sessionDrivers,setSessionDrivers]=useState([]),[selectedTelemetryDriver,setSelectedTelemetryDriver]=useState('');
+ const [sessionLaps,setSessionLaps]=useState([]),[referenceLap,setReferenceLap]=useState(''),[comparisonLap,setComparisonLap]=useState('');
+ const [lapComparison,setLapComparison]=useState(null),[telemetryBusy,setTelemetryBusy]=useState(false),[telemetryError,setTelemetryError]=useState('');
+ const [telemetryNotice,setTelemetryNotice]=useState('');
+
  const active=nav.find(x=>x.id===page)||nav[0],progress=Math.round(completed.length/lessons.length*100);
  const latestLiveSample=raceFeed.samples.at(-1);
  const sampleAgeSeconds=latestLiveSample?Math.max(0,Math.round((Date.now()-new Date(latestLiveSample.date).getTime())/1000)):null;
@@ -71,6 +78,74 @@ export default function App(){
  },[raceDriverNo]);
  useEffect(()=>{if(page!=='live-session'||!raceAuto)return;loadRaceFeed();const id=setInterval(loadRaceFeed,5000);return()=>clearInterval(id);},[page,raceAuto,loadRaceFeed]);
 
+
+ const loadSessionCatalog=async()=>{
+  setTelemetryBusy(true);setTelemetryError('');setTelemetryNotice('');
+  try{
+   const rows=await getSessions(sessionYear);
+   const sorted=rows.sort((a,b)=>new Date(b.date_start)-new Date(a.date_start));
+   setSessionCatalog(sorted);setSelectedSession(sorted[0]?String(sorted[0].session_key):'');
+   setSessionDrivers([]);setSessionLaps([]);setLapComparison(null);
+   if(!sorted.length)setTelemetryNotice('No sessions were returned for this season.');
+  }catch(err){setTelemetryError(err.message||'Unable to load sessions.');}
+  finally{setTelemetryBusy(false);}
+ };
+ const loadSessionDrivers=async()=>{
+  if(!selectedSession)return;
+  setTelemetryBusy(true);setTelemetryError('');
+  try{
+   const rows=await getDrivers(selectedSession);
+   setSessionDrivers(rows.sort((a,b)=>String(a.name_acronym).localeCompare(String(b.name_acronym))));
+   setSelectedTelemetryDriver(rows[0]?String(rows[0].driver_number):'');
+   setSessionLaps([]);setLapComparison(null);
+  }catch(err){setTelemetryError(err.message||'Unable to load drivers.');}
+  finally{setTelemetryBusy(false);}
+ };
+ const loadDriverLaps=async()=>{
+  if(!selectedSession||!selectedTelemetryDriver)return;
+  setTelemetryBusy(true);setTelemetryError('');
+  try{
+   const rows=await getLaps(selectedSession,selectedTelemetryDriver);
+   const valid=rows.filter(l=>l.date_start&&Number.isFinite(Number(l.duration))&&Number(l.duration)>0&&!l.is_pit_out_lap&&!l.deleted);
+   valid.sort((a,b)=>Number(a.lap_number)-Number(b.lap_number));
+   setSessionLaps(valid);setReferenceLap(valid[0]?String(valid[0].lap_number):'');setComparisonLap(valid[1]?String(valid[1].lap_number):'');
+   setLapComparison(null);
+   if(!valid.length)setTelemetryNotice('No analysable laps were returned for this driver/session.');
+  }catch(err){setTelemetryError(err.message||'Unable to load laps.');}
+  finally{setTelemetryBusy(false);}
+ };
+ const analyseLapPair=async()=>{
+  const a=sessionLaps.find(l=>String(l.lap_number)===referenceLap);
+  const b=sessionLaps.find(l=>String(l.lap_number)===comparisonLap);
+  if(!a||!b){setTelemetryError('Choose two valid laps before analysing.');return;}
+  if(referenceLap===comparisonLap){setTelemetryError('Choose two different laps to compare.');return;}
+  setTelemetryBusy(true);setTelemetryError('');setTelemetryNotice('');
+  try{
+   const [rawA,rawB]=await Promise.all([
+    getLapSamples(selectedSession,selectedTelemetryDriver,a),
+    getLapSamples(selectedSession,selectedTelemetryDriver,b)
+   ]);
+   const aligned=alignLaps(rawA,rawB);
+   const sectors=sectorComparison(rawA,rawB);
+   const brakingA=findBrakingZones(rawA.samples),brakingB=findBrakingZones(rawB.samples);
+   const track=normalizeTrack(rawA.location);
+   setLapComparison({a:rawA,b:rawB,aligned,sectors,brakingA,brakingB,track});
+   if(!track.length)setTelemetryNotice('Lap comparison loaded. OpenF1 location samples were unavailable, so the track map is hidden.');
+  }catch(err){setTelemetryError(err.message||'Unable to analyse the selected laps.');}
+  finally{setTelemetryBusy(false);}
+ };
+ const importTelemetryFile=async e=>{
+  const file=e.target.files?.[0];if(!file)return;
+  setTelemetryError('');
+  try{
+   if(file.size>20*1024*1024)throw new Error('Maximum file size is 20 MB.');
+   const parsed=parseTelemetryCsv(await file.text());
+   setTelemetry({name:file.name,data:parsed.flatMap(l=>l.samples.map(s=>({...s,lap:l.id}))),laps:parsed.map(l=>l.id)});
+   setLapA(parsed[0].id);setLapB(parsed[1]?.id||parsed[0].id);setTelemetryNotice('CSV imported locally. OpenF1 session analysis remains available above.');
+  }catch(err){setTelemetryError(err.message||'Unable to import CSV.');}
+  e.target.value='';
+ };
+
  const choose=id=>{setPage(id);setMobile(false);};
  const mark=i=>setCompleted(v=>v.includes(i)?v:[...v,i]);
  const resetQuiz=()=>setSubmitted(v=>({...v,[lesson]:false}));
@@ -104,10 +179,51 @@ export default function App(){
     <Note><b>Data-source transparency:</b> OpenF1 provides historical telemetry from 2023 onward without authentication; real-time data requires a paid subscription. If live access is unavailable, the app displays the service error or latest returned samples rather than inventing readings. <a href="https://openf1.org/docs/" target="_blank" rel="noreferrer">OpenF1 API documentation</a>.</Note>
    </>}
 
-   {page==='telemetry'&&<><Heading eyebrow="ENGINEERING LAB 01 · DATA ANALYSIS" title="Read the lap. Find the story." description="Import a telemetry CSV or explore the illustrative lap. Plot speed, throttle and braking, then compare laps to understand where performance changes."/><div className="panel import-panel"><div className="panel-head"><div><span className="eyebrow">TELEMETRY DATASET</span><h3>{telemetry?telemetry.name:'Explore a sample lap or import your own'}</h3></div><Upload size={19}/></div><label className="upload-btn"><Upload size={15}/> Import telemetry CSV<input type="file" accept=".csv,text/csv" onChange={loadFile}/></label><div className="import-status">Required columns: <b>speed, throttle, brake</b> · Optional: lap, distance, time · Max 20 MB · processed locally</div>{error&&<div className="import-error">{error}</div>}{telemetry&&<div className="lap-selectors"><label>Reference lap <select value={lapA} onChange={e=>setLapA(e.target.value)}>{laps.map(l=><option key={l}>{l}</option>)}</select></label><label>Compare lap <select value={lapB} onChange={e=>setLapB(e.target.value)}>{laps.map(l=><option key={l}>{l}</option>)}</select></label></div>}</div>
-    <div className="metric-grid"><Metric label="REFERENCE SAMPLES" value={chosenA.length} unit="" sub="Selected lap samples"/><Metric label="PEAK SPEED" value={Math.max(...chosenA.map(x=>x.speed)).toFixed(0)} unit=" km/h" sub="Reference lap"/><Metric label="COMPARISON" value={telemetry?lapB:'DEMO'} unit="" sub="Second trace overlay"/><Metric label="DATA SOURCE" value={telemetry?'CSV':'SAMPLE'} unit="" sub={telemetry?'Imported locally':'Illustrative only'}/></div>
-    {['speed','throttle','brake'].map((key,i)=><div className="panel chart-panel" key={key}><div className="panel-head"><div><span className="eyebrow">CHANNEL 0{i+1}</span><h3>{['Speed trace','Throttle application','Brake application'][i]}</h3></div><span className="muted">{i===0?'km/h':'%'}</span></div><div className="chart-wrap"><ResponsiveContainer width="100%" height="100%"><LineChart data={chart}><CartesianGrid stroke="#242a35" strokeDasharray="3 5"/><XAxis dataKey="x" stroke="#7f8998" tickLine={false} axisLine={false}/><YAxis domain={i===0?['auto','auto']:[0,100]} stroke="#7f8998" tickLine={false} axisLine={false}/><Tooltip contentStyle={{background:'#171c25',border:'1px solid #303846',borderRadius:8,color:'#f4f5f7'}}/><Line type={i===0?'monotone':'stepAfter'} dataKey={key} name="Reference" stroke="#e8b34e" dot={false} strokeWidth={2.4}/><Line type={i===0?'monotone':'stepAfter'} dataKey={i===0?'other':i===1?'otherThrottle':'otherBrake'} name="Comparison" stroke="#65c79a" dot={false} strokeWidth={2}/></LineChart></ResponsiveContainer></div><div className="chart-legend"><span><i className="gold-dot"/> Reference lap</span><span><i className="green-dot"/> Comparison lap</span><span>Distance / sample index</span></div></div>)}
-    <Note><b>How to interpret it:</b> A speed trace shows where the car accelerates and slows. Throttle and brake channels help explain driver inputs. Demo values are illustrative, not official F1 telemetry. Imported laps overlay by sample index; use matching distance sampling for meaningful comparison.</Note></>}
+   {page==='telemetry'&&<><Heading eyebrow="ENGINEERING LAB 01 · PROFESSIONAL TELEMETRY" title="Analyse the lap, not just the chart." description="Load a real OpenF1 session, select a driver and compare recorded laps using distance-aligned telemetry, sector timing, braking events and GPS position samples."/>
+    <div className="panel telemetry-source-panel">
+     <div className="panel-head"><div><span className="eyebrow">DATASET CONNECTION</span><h3>OpenF1 historical session explorer</h3></div><span className="sim-tag">PUBLIC DATA API</span></div>
+     <div className="telemetry-controls">
+      <label>Season<select value={sessionYear} onChange={e=>{setSessionYear(e.target.value);setSessionCatalog([]);setSelectedSession('');setSessionDrivers([]);setSessionLaps([]);setLapComparison(null);}}>{['2026','2025','2024','2023'].map(y=><option key={y}>{y}</option>)}</select></label>
+      <button className="secondary-btn" onClick={loadSessionCatalog} disabled={telemetryBusy}>{telemetryBusy?'Loading…':'Load sessions'}</button>
+      <label>Grand Prix / session<select value={selectedSession} onChange={e=>{setSelectedSession(e.target.value);setSessionDrivers([]);setSessionLaps([]);setLapComparison(null);}} disabled={!sessionCatalog.length}><option value="">Select a session</option>{sessionCatalog.map(s=><option key={s.session_key} value={String(s.session_key)}>{s.country_name} · {s.meeting_name} · {s.session_name} ({s.date_start?.slice(0,10)})</option>)}</select></label>
+      <button className="secondary-btn" onClick={loadSessionDrivers} disabled={!selectedSession||telemetryBusy}>Load drivers</button>
+      <label>Driver<select value={selectedTelemetryDriver} onChange={e=>{setSelectedTelemetryDriver(e.target.value);setSessionLaps([]);setLapComparison(null);}} disabled={!sessionDrivers.length}><option value="">Select a driver</option>{sessionDrivers.map(d=><option key={d.driver_number} value={String(d.driver_number)}>{d.name_acronym} · {d.full_name} · {d.team_name}</option>)}</select></label>
+      <button className="secondary-btn" onClick={loadDriverLaps} disabled={!selectedTelemetryDriver||telemetryBusy}>Load laps</button>
+      <label>Reference lap<select value={referenceLap} onChange={e=>{setReferenceLap(e.target.value);setLapComparison(null);}} disabled={!sessionLaps.length}><option value="">Lap A</option>{sessionLaps.map(l=><option key={l.lap_number} value={String(l.lap_number)}>Lap {l.lap_number} · {Number(l.duration).toFixed(3)} s</option>)}</select></label>
+      <label>Compare lap<select value={comparisonLap} onChange={e=>{setComparisonLap(e.target.value);setLapComparison(null);}} disabled={!sessionLaps.length}><option value="">Lap B</option>{sessionLaps.map(l=><option key={l.lap_number} value={String(l.lap_number)}>Lap {l.lap_number} · {Number(l.duration).toFixed(3)} s</option>)}</select></label>
+      <button className="primary-btn" onClick={analyseLapPair} disabled={!referenceLap||!comparisonLap||telemetryBusy}>{telemetryBusy?'Analysing…':'Analyse lap pair'} <ArrowUpRight size={14}/></button>
+     </div>
+     {telemetryError&&<div className="import-error">{telemetryError}</div>}
+     {telemetryNotice&&<div className="telemetry-notice"><Info size={15}/>{telemetryNotice}</div>}
+     <div className="import-status">Source: OpenF1 public API · Historical sessions available from 2023 · Telemetry access and endpoint availability may vary. Raw car-data timestamps are retained; distance is estimated by integrating speed over time.</div>
+    </div>
+    <div className="panel telemetry-source-panel">
+     <div className="panel-head"><div><span className="eyebrow">LOCAL DATASET</span><h3>Import your own telemetry CSV</h3></div><Upload size={19}/></div>
+     <div className="telemetry-local-row"><label className="upload-btn"><Upload size={15}/> Choose CSV file<input type="file" accept=".csv,text/csv" onChange={importTelemetryFile}/></label><span className="import-status">Quoted CSV fields supported · Required: speed, throttle, brake · Optional: lap, distance, time · Processed locally, not uploaded.</span></div>
+     {telemetry&&<div className="telemetry-notice"><CheckCircle2 size={15}/> Imported {telemetry.name}: {telemetry.laps.length} lap group(s), {telemetry.data.length} samples. Select a session above for full sector/GPS analysis.</div>}
+    </div>
+    {lapComparison&&<>
+     <div className="telemetry-session-heading"><div><span className="eyebrow">ANALYSIS RESULT · {lapComparison.a.source}</span><h2>{raceFeed.session?.meeting_name||sessionCatalog.find(s=>String(s.session_key)===selectedSession)?.meeting_name||'Selected session'} · {sessionDrivers.find(d=>String(d.driver_number)===selectedTelemetryDriver)?.name_acronym||'Driver'}</h2><p>Lap {referenceLap} compared with lap {comparisonLap} · {lapComparison.aligned.length} aligned distance points</p></div><span className="sim-tag">DISTANCE ALIGNED</span></div>
+     <div className="metric-grid telemetry-metrics">
+      <Metric label="REFERENCE LAP" value={Number(lapComparison.a.lap.duration).toFixed(3)} unit=" s" sub={'Lap '+referenceLap}/>
+      <Metric label="COMPARISON LAP" value={Number(lapComparison.b.lap.duration).toFixed(3)} unit=" s" sub={'Lap '+comparisonLap}/>
+      <Metric label="LAP DELTA" value={Number(lapComparison.b.lap.duration-lapComparison.a.lap.duration)>0?'+':''}{(Number(lapComparison.b.lap.duration)-Number(lapComparison.a.lap.duration)).toFixed(3)} unit=" s" sub="B minus A · positive is slower"/>
+      <Metric label="COMMON DISTANCE" value={Math.round(lapComparison.aligned.at(-1)?.distance||0).toLocaleString()} unit=" m" sub="Integrated speed · shared range"/>
+     </div>
+     <div className="panel chart-panel"><div className="panel-head"><div><span className="eyebrow">CHANNEL 01 · DISTANCE NORMALISED</span><h3>Speed trace comparison</h3></div><span className="muted">km/h · metres</span></div><div className="chart-wrap"><ResponsiveContainer width="100%" height="100%"><LineChart data={lapComparison.aligned}><CartesianGrid stroke="#242a35" strokeDasharray="3 5"/><XAxis dataKey="distance" stroke="#7f8998" tickLine={false} axisLine={false} label={{value:'Distance (m)',position:'insideBottom',offset:-4,fill:'#7f8998'}}/><YAxis stroke="#7f8998" tickLine={false} axisLine={false} unit=""/><Tooltip contentStyle={{background:'#171c25',border:'1px solid #303846',borderRadius:8,color:'#f4f5f7'}} labelFormatter={v=>v+' m'}/><Line type="monotone" dataKey="speedA" name={'Lap '+referenceLap} stroke="#e8b34e" dot={false} strokeWidth={2.2}/><Line type="monotone" dataKey="speedB" name={'Lap '+comparisonLap} stroke="#65c79a" dot={false} strokeWidth={2.1}/></LineChart></ResponsiveContainer></div><div className="chart-legend"><span><i className="gold-dot"/> LAP {referenceLap}</span><span><i className="green-dot"/> LAP {comparisonLap}</span><span>Interpolated to common distance grid</span></div></div>
+     <div className="lab-grid telemetry-dual-charts">
+      <div className="panel chart-panel"><div className="panel-head"><div><span className="eyebrow">CHANNEL 02</span><h3>Throttle application</h3></div><span className="muted">%</span></div><div className="chart-wrap compact-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={lapComparison.aligned}><CartesianGrid stroke="#242a35" strokeDasharray="3 5"/><XAxis dataKey="distance" stroke="#7f8998"/><YAxis domain={[0,100]} stroke="#7f8998"/><Tooltip contentStyle={{background:'#171c25',border:'1px solid #303846',color:'#f4f5f7'}}/><Line type="stepAfter" dataKey="throttleA" name={'Lap '+referenceLap} stroke="#e8b34e" dot={false}/><Line type="stepAfter" dataKey="throttleB" name={'Lap '+comparisonLap} stroke="#65c79a" dot={false}/></LineChart></ResponsiveContainer></div></div>
+      <div className="panel chart-panel"><div className="panel-head"><div><span className="eyebrow">CHANNEL 03</span><h3>Brake application</h3></div><span className="muted">%</span></div><div className="chart-wrap compact-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={lapComparison.aligned}><CartesianGrid stroke="#242a35" strokeDasharray="3 5"/><XAxis dataKey="distance" stroke="#7f8998"/><YAxis domain={[0,100]} stroke="#7f8998"/><Tooltip contentStyle={{background:'#171c25',border:'1px solid #303846',color:'#f4f5f7'}}/><Line type="stepAfter" dataKey="brakeA" name={'Lap '+referenceLap} stroke="#e8b34e" dot={false}/><Line type="stepAfter" dataKey="brakeB" name={'Lap '+comparisonLap} stroke="#e17c75" dot={false}/></LineChart></ResponsiveContainer></div></div>
+     </div>
+     <div className="lab-grid telemetry-analysis-grid">
+      <div className="panel"><div className="panel-head"><div><span className="eyebrow">SECTOR TIMING</span><h3>Where was time gained?</h3></div><Timer size={18}/></div><div className="sector-table"><div className="sector-row sector-header"><span>SECTOR</span><span>LAP {referenceLap}</span><span>LAP {comparisonLap}</span><span>DELTA</span></div>{lapComparison.sectors.map(s=><div className="sector-row" key={s.sector}><b>{s.sector}</b><span>{s.a===null?'—':s.a.toFixed(3)+' s'}</span><span>{s.b===null?'—':s.b.toFixed(3)+' s'}</span><strong className={s.delta===null?'':s.delta>0?'delta-slower':'delta-faster'}>{s.delta===null?'Unavailable':(s.delta>0?'+':'')+s.delta.toFixed(3)+' s'}</strong></div>)}</div><p className="import-status">Sector delta = comparison lap minus reference lap. Negative means the comparison lap was faster.</p></div>
+      <div className="panel"><div className="panel-head"><div><span className="eyebrow">BRAKING ANALYSIS</span><h3>Detected braking zones</h3></div><Activity size={18}/></div><div className="braking-list">{lapComparison.brakingA.length?lapComparison.brakingA.slice(0,6).map((z,i)=><div className="braking-row" key={i}><b>{String(i+1).padStart(2,'0')}</b><span><strong>{z.distance.toLocaleString()} m</strong><small>Entry {z.startSpeed.toFixed(0)} → min {z.minSpeed.toFixed(0)} km/h</small></span><em>{z.peakDecel.toFixed(1)} m/s²</em></div>):<p className="muted">No braking events met the detection threshold in this lap.</p>}</div><p className="import-status">Heuristic detection: brake channel ≥8%, or deceleration ≥2.2 m/s² with throttle ≤15%. Not a team-defined brake-zone classification.</p></div>
+     </div>
+     <div className="panel track-map-panel"><div className="panel-head"><div><span className="eyebrow">GPS POSITION DATA</span><h3>Track map · reference lap</h3></div><MapPin size={18}/></div>{lapComparison.track.length>1?<svg viewBox="0 0 300 200" role="img" aria-label="Normalised GPS position trace for the selected lap"><polyline points={lapComparison.track.map(p=>p.x+','+p.y).join(' ')} fill="none" stroke="#e8b34e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/><circle cx={lapComparison.track[0].x} cy={lapComparison.track[0].y} r="4" fill="#65c79a"/><circle cx={lapComparison.track.at(-1).x} cy={lapComparison.track.at(-1).y} r="4" fill="#e17c75"/></svg>:<p className="muted">GPS position samples were not returned for this lap. Track map requires OpenF1 location data.</p>}<div className="chart-legend"><span><i className="green-dot"/> START</span><span><i className="red-dot"/> FINISH</span><span>Position coordinates normalised for display; not a surveyed circuit map.</span></div></div>
+     <Note><b>Engineering limitations:</b> distance is estimated by integrating sampled speed over time, then both laps are interpolated onto the common distance interval. It is not official GPS lap distance. Sector timing comes from the OpenF1 lap record. Braking zones are heuristic. Track geometry is a normalised plot of available position samples. This is educational analysis, not private team telemetry.</Note>
+    </>}
+    {!lapComparison&&<div className="live-empty telemetry-empty"><Activity size={28}/><h3>Build a real session comparison</h3><p>Load a season, choose a Grand Prix session, select a driver, load the lap list and analyse two completed laps. The charts and engineering diagnostics appear here.</p></div>}
+   </>}
    {page==='aero'&&<><Heading eyebrow="ENGINEERING LAB 02 · AERODYNAMICS" title="Make airflow work for the car." description="Explore the relationship between speed, aerodynamic load and drag. Change the simplified wing-effect control and observe how the estimates respond."/><div className="metric-grid"><Metric label="ESTIMATED DOWNFORCE" value={(downforce/1000).toFixed(2)} unit=" kN" sub="Simplified model"/><Metric label="ESTIMATED DRAG" value={(drag/1000).toFixed(2)} unit=" kN" sub="Simplified model"/><Metric label="AIR SPEED" value={speed} unit=" km/h" sub="Experiment input"/><Metric label="WING EFFECT" value={wing} unit="%" sub="Illustrative coefficient scale"/></div><div className="lab-grid"><div className="panel control-panel"><div className="panel-head"><div><span className="eyebrow">INTERACTIVE EXPERIMENT</span><h3>Change the airflow conditions</h3></div><Wind size={19}/></div><div className="slider-control"><div><label>Vehicle speed</label><b>{speed} km/h</b></div><input type="range" min="80" max="340" value={speed} onChange={e=>setSpeed(+e.target.value)}/><div className="range-labels"><span>80 km/h</span><span>340 km/h</span></div></div><div className="slider-control"><div><label>Wing/downforce effect</label><b>{wing}%</b></div><input type="range" min="5" max="50" value={wing} onChange={e=>setWing(+e.target.value)}/><div className="range-labels"><span>Low load</span><span>High load</span></div></div><div className="slider-control"><div><label>Air density</label><b>{rho.toFixed(2)} kg/m³</b></div><input type="range" min="0.9" max="1.3" step=".01" value={rho} onChange={e=>setRho(+e.target.value)}/><div className="range-labels"><span>Lower density</span><span>Higher density</span></div></div></div><div className="panel results-panel"><span className="eyebrow">WHAT THE MODEL SUGGESTS</span><h2 className="diag-code">v²</h2><h3>Aerodynamic forces rise with the square of speed.</h3><p className="muted">If speed doubles, the aerodynamic force is approximately four times greater, assuming unchanged air density and aerodynamic coefficients.</p><div className="formula-box"><span>SIMPLIFIED FORCE RELATION</span><div><b>F = ½ ρ v² C A</b></div><p className="muted">ρ air density · v speed · C force coefficient · A reference area</p></div><div className="insight"><Lightbulb size={17}/><p>More downforce can improve cornering grip, but usually brings additional drag. Real F1 aero is much more complex and depends on the full car, ride height, yaw, ground effect and flow interactions.</p></div></div></div><Note>This is a conceptual teaching model, not a CFD solver or a representation of a current F1 car. It uses illustrative coefficients to demonstrate trends.</Note></>}
    {page==='vehicle'&&<><Heading eyebrow="ENGINEERING LAB 03 · VEHICLE DYNAMICS" title="Understand grip, balance and load." description="Experiment with tyre grip and corner speed to explore basic vehicle-dynamics relationships."/><div className="metric-grid"><Metric label="FRICTION INPUT" value={mu.toFixed(2)} unit=" μ" sub="Simplified tyre-road coefficient"/><Metric label="CORNER SPEED" value={corner} unit=" km/h" sub="Illustrative speed input"/><Metric label="BRAKING DISTANCE" value={brakingDistance.toFixed(1)} unit=" m" sub="Idealised constant deceleration"/><Metric label="VEHICLE MASS" value={mass} unit=" kg" sub="Illustrative car + driver"/></div><div className="lab-grid"><div className="panel control-panel"><div className="panel-head"><div><span className="eyebrow">CHANGE THE CONDITIONS</span><h3>Tyre and vehicle inputs</h3></div><CarFront size={19}/></div><div className="slider-control"><div><label>Grip coefficient (μ)</label><b>{mu.toFixed(2)}</b></div><input type="range" min=".8" max="2.2" step=".05" value={mu} onChange={e=>setMu(+e.target.value)}/></div><div className="slider-control"><div><label>Corner speed</label><b>{corner} km/h</b></div><input type="range" min="40" max="180" value={corner} onChange={e=>setCorner(+e.target.value)}/></div><div className="slider-control"><div><label>Vehicle mass</label><b>{mass} kg</b></div><input type="range" min="700" max="950" value={mass} onChange={e=>setMass(+e.target.value)}/></div></div><div className="panel results-panel"><span className="eyebrow">ENGINEERING IDEA</span><h2 className="diag-code">F = μN</h2><h3>Tyres turn vertical load into force.</h3><p className="muted">The friction relationship is a useful starting point for understanding tyre forces. Real tyre behaviour is nonlinear and depends on load, temperature, pressure, wear, camber and combined braking/cornering.</p><div className="formula-box"><span>IDEALISED BRAKING RELATION</span><div><b>d = v² / (2 μ g)</b></div><p className="muted">Assumes a flat surface, constant friction and no aerodynamic or gradient effects.</p></div><div className="insight"><Lightbulb size={17}/><p>Try increasing μ and observe how the idealised stopping distance falls. In a real F1 car, aerodynamic load changes with speed and tyre grip is not a fixed constant.</p></div></div></div><Note>These calculations are educational approximations. They are not setup recommendations or validated vehicle simulations.</Note></>}
    {page==='strategy'&&<><Heading eyebrow="RACE OPERATIONS · STRATEGY LAB" title="Turn tyre life into a race plan." description="Explore a simplified tyre stint model. Change compound and stint length to see how an illustrative degradation penalty accumulates."/><div className="metric-grid"><Metric label="TYRE COMPOUND" value={tyre.toUpperCase()} unit="" sub="Selected scenario"/><Metric label="STINT LENGTH" value={stint} unit=" laps" sub="Scenario input"/><Metric label="PACE PENALTY" value={paceLoss.toFixed(2)} unit=" s/lap" sub="Illustrative end-stint penalty"/><Metric label="TOTAL STINT LOSS" value={(paceLoss*stint/2).toFixed(1)} unit=" s" sub="Approximate accumulated loss"/></div><div className="panel control-panel"><div className="panel-head"><div><span className="eyebrow">BUILD A TYRE SCENARIO</span><h3>Choose compound and stint length</h3></div><Flag size={19}/></div><div className="compound-picker">{['soft','medium','hard'].map(t=><button className={tyre===t?'compound active':'compound'} onClick={()=>setTyre(t)} key={t}><span className={'tyre '+t}/><b>{t.toUpperCase()}</b><small>{t==='soft'?'Higher grip · faster wear':t==='medium'?'Balanced pace and life':'Longer life · lower peak grip'}</small></button>)}</div><div className="slider-control"><div><label>Stint length</label><b>{stint} laps</b></div><input type="range" min="5" max="45" value={stint} onChange={e=>setStint(+e.target.value)}/><div className="range-labels"><span>5 laps</span><span>45 laps</span></div></div><div className="panel chart-panel"><div className="panel-head"><div><span className="eyebrow">ILLUSTRATIVE TYRE DEGRADATION</span><h3>Estimated pace loss through the stint</h3></div></div><div className="chart-wrap"><ResponsiveContainer width="100%" height="100%"><AreaChart data={Array.from({length:stint},(_,i)=>({lap:i+1,loss:+(deg*(i+1)*0.9).toFixed(2)}))}><CartesianGrid stroke="#242a35" strokeDasharray="3 5"/><XAxis dataKey="lap" stroke="#7f8998"/><YAxis stroke="#7f8998"/><Tooltip contentStyle={{background:'#171c25',border:'1px solid #303846',borderRadius:8,color:'#f4f5f7'}}/><Area dataKey="loss" name="Pace loss (s/lap)" stroke="#e8b34e" fill="#e8b34e" fillOpacity={.15}/></AreaChart></ResponsiveContainer></div></div></div><Note>Tyre degradation depends on track, setup, temperature, driving style, traffic and compound. This linear model is only for learning the idea; it does not predict real race pace or pit strategy.</Note></>}
