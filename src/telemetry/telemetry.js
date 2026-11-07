@@ -154,8 +154,8 @@ function parseCsvRows(text) {
     if (char === '"' && quoted && text[i + 1] === '"') { cell += '"'; i++; }
     else if (char === '"') quoted = !quoted;
     else if (char === ',' && !quoted) { row.push(cell.trim()); cell = ''; }
-    else if ((char === '\\n' || char === '\\r') && !quoted) {
-      if (char === '\\r' && text[i + 1] === '\\n') i++;
+    else if ((char === '\n' || char === '\r') && !quoted) {
+      if (char === '\r' && text[i + 1] === '\n') i++;
       row.push(cell.trim()); cell = '';
       if (row.some(value => value !== '')) rows.push(row);
       row = [];
@@ -169,7 +169,7 @@ function parseCsvRows(text) {
 
 const normalizeHeader = value => value.toLowerCase().replace(/[\\s_-]/g, '');
 export function parseTelemetryCsv(text) {
-  const rows = parseCsvRows(text.replace(/^\\uFEFF/, ''));
+  const rows = parseCsvRows(text.replace(/^\uFEFF/, ''));
   if (rows.length < 3) throw new Error('CSV needs a header and at least two data rows.');
   const headers = rows[0].map(normalizeHeader);
   const find = names => headers.findIndex(header => names.includes(header));
