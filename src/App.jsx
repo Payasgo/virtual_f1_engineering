@@ -120,7 +120,7 @@ export default function App(){
   setTelemetryBusy(true);setTelemetryError('');
   try{
    const rows=await getLaps(selectedSession,selectedTelemetryDriver);
-   const valid=rows.filter(l=>l.date_start&&Number.isFinite(Number(l.duration))&&Number(l.duration)>0&&!l.is_pit_out_lap&&!l.deleted);
+   const valid=rows.map(l=>({...l,duration:Number(l.lap_duration??l.duration)})).filter(l=>l.date_start&&Number.isFinite(l.duration)&&l.duration>0&&!l.is_pit_out_lap&&!l.deleted);
    valid.sort((a,b)=>Number(a.lap_number)-Number(b.lap_number));
    setSessionLaps(valid);setReferenceLap(valid[0]?String(valid[0].lap_number):'');setComparisonLap(valid[1]?String(valid[1].lap_number):'');
    setLapComparison(null);
