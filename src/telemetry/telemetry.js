@@ -167,7 +167,7 @@ function parseCsvRows(text) {
   return rows;
 }
 
-const normalizeHeader = value => value.toLowerCase().replace(/[\\s_-]/g, '');
+const normalizeHeader = value => value.toLowerCase().replace(/[\s_-]/g, '');
 export function parseTelemetryCsv(text) {
   const rows = parseCsvRows(text.replace(/^\uFEFF/, ''));
   if (rows.length < 3) throw new Error('CSV needs a header and at least two data rows.');
