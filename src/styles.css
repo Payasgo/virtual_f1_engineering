@@ -65,3 +65,39 @@
 .live-error{display:flex;gap:10px;padding:12px;border:1px solid #69423b;background:#281e1d;color:#e8b34e;border-radius:6px;margin:12px 0}.live-error b{font-size:10px}.live-error p{font-size:10px;color:#bdada7;margin:4px 0 0;line-height:1.5}
 .live-session-strip{margin:14px 0}.live-metrics{margin-top:14px}.live-data-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-top:13px}.car-state{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:13px}.car-state>div{padding:12px;background:#1b222c;border:1px solid #303a47;border-radius:5px}.car-state small{display:block;font-size:8px;letter-spacing:1px;color:#8591a0}.car-state b{display:block;font:700 25px 'Barlow Condensed';color:#e8b34e;margin-top:6px}.last-sample-time{font:700 28px 'Barlow Condensed';margin:9px 0;color:#edf0f4}.live-empty{display:flex;flex-direction:column;align-items:center;text-align:center;gap:9px;padding:42px 20px;margin:14px 0;border:1px dashed #3b4755;border-radius:8px;background:#111720;color:#e8b34e}.live-empty h3{font:700 23px 'Barlow Condensed';color:#eef0f3;margin:3px 0}.live-empty p{max-width:520px;font-size:10px;line-height:1.7;color:#98a4b2;margin:0 0 9px}.red-dot{display:inline-block;width:7px;height:7px;background:#e17c75;border-radius:50%;margin-right:6px}
 @media(max-width:760px){.live-data-grid{grid-template-columns:1fr}.live-controls{width:100%}.live-controls select{flex:1}.live-session-strip{grid-template-columns:1fr 1fr}.car-state{grid-template-columns:repeat(3,1fr)}}
+
+
+/* Professional telemetry workspace */
+.telemetry-source-panel{margin-bottom:18px}
+.telemetry-controls{display:grid;grid-template-columns:repeat(4,minmax(145px,1fr));gap:12px;align-items:end;margin:18px 0}
+.telemetry-controls label,.lap-selectors label{display:flex;flex-direction:column;gap:7px;color:var(--muted,#9aa6b6);font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+.telemetry-controls select,.lap-selectors select{width:100%;min-width:0;background:#0d1118;border:1px solid #303846;border-radius:7px;color:#edf1f6;padding:11px 10px;font:inherit;font-size:12px;letter-spacing:normal;text-transform:none}
+.telemetry-controls select:disabled{opacity:.45}
+.telemetry-controls button{min-height:39px;justify-content:center;white-space:nowrap}
+.telemetry-notice{display:flex;align-items:flex-start;gap:9px;margin-top:12px;padding:11px 13px;border:1px solid rgba(101,199,154,.25);border-radius:7px;background:rgba(101,199,154,.07);color:#a9dfc5;font-size:12px;line-height:1.5}
+.telemetry-local-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:14px}
+.telemetry-session-heading{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;margin:30px 0 14px}
+.telemetry-session-heading h2{font-size:23px;margin:7px 0 4px;color:#f3f5f8}
+.telemetry-session-heading p{font-size:12px;color:#9ba8ba;margin:0}
+.telemetry-metrics{margin-bottom:18px}
+.telemetry-dual-charts{grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:18px}
+.compact-chart{height:220px}
+.telemetry-analysis-grid{grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:18px}
+.sector-table{margin:16px 0 12px}
+.sector-row{display:grid;grid-template-columns:.65fr 1fr 1fr 1fr;gap:8px;align-items:center;padding:12px 7px;border-bottom:1px solid #28313d;font-size:12px;color:#cbd3df}
+.sector-row span:nth-child(n+2),.sector-row strong{text-align:right;font-variant-numeric:tabular-nums}
+.sector-header{font-size:9px;letter-spacing:.09em;color:#8795a8}
+.sector-row b{color:#f0f2f5}
+.delta-slower{color:#e58c83}.delta-faster{color:#65c79a}
+.braking-list{display:flex;flex-direction:column;gap:2px;margin:14px 0}
+.braking-row{display:grid;grid-template-columns:28px 1fr auto;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #28313d}
+.braking-row>b{color:#e8b34e;font-size:12px}
+.braking-row span{display:flex;flex-direction:column;gap:3px}
+.braking-row strong{font-size:12px;color:#e7ebf1}
+.braking-row small{font-size:10px;color:#8f9bad}
+.braking-row em{font-size:11px;color:#e58c83;font-style:normal;font-variant-numeric:tabular-nums}
+.track-map-panel{margin-bottom:18px}
+.track-map-panel svg{display:block;width:100%;height:260px;max-width:700px;margin:12px auto;background:radial-gradient(ellipse at center,rgba(255,255,255,.025),transparent 68%);border:1px solid #28313d;border-radius:8px}
+.telemetry-empty{margin-top:18px}
+@media(max-width:1050px){.telemetry-controls{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.telemetry-controls,.telemetry-dual-charts,.telemetry-analysis-grid{grid-template-columns:1fr}.telemetry-session-heading{align-items:flex-start;flex-direction:column}.telemetry-local-row{align-items:flex-start;flex-direction:column}.sector-row{font-size:10px;gap:4px}.track-map-panel svg{height:210px}}
