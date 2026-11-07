@@ -45,7 +45,7 @@ function parseTelemetryCsv(text){
  const headers=rows[0].map(h=>h.toLowerCase().trim().replace(/[()\[\]]/g,'').replace(/[_-]+/g,' ').replace(/\s+/g,' '));const mapping={};
  for(const [key,names] of Object.entries(telemetryAliases)){const idx=headers.findIndex(h=>names.some(a=>h===a.replace(/_/g,' ')));if(idx>=0)mapping[key]=idx;}
  for(const key of ['speed','throttle','brake'])if(mapping[key]===undefined)throw new Error('Missing required telemetry column: '+key+'. Required: speed, throttle, brake. Optional: lap, time, distance.');
- const parsed=rows.slice(1).map((r,i)=>{const o={_index:i};for(const [key,idx] of Object.entries(mapping)){const raw=(r[idx]||'').trim().replace(/%$/,'');o[key]=key==='lap'?(raw||'1'):(raw===''?null:Number(raw));}return o;}).filter(r=>r.speed!==null&&r.throttle!==null&&r.brake!==null);
+ const parsed=rows.slice(1).map((r,i)=>{const o={_index:i};for(const [key,idx] of Object.entries(mapping)){const raw=(r[idx]||'').trim().replace(/%$/,'');o[key]=key==='lap'?(raw||'1'):(raw===''?null:Number(raw));}return o;}).filter(r=>Number.isFinite(r.speed)&&Number.isFinite(r.throttle)&&Number.isFinite(r.brake));
  if(parsed.length<2)throw new Error('At least two rows with numeric speed, throttle and brake values are required.');
  return {rows:parsed,laps:[...new Set(parsed.map(r=>String(r.lap??'1')))],units:{speed:headers[mapping.speed].includes('mph')?'mph':'km/h'}};
 }
