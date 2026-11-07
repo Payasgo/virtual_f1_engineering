@@ -8,6 +8,8 @@ async function request(endpoint, params, signal) {
   });
   if (!response.ok) {
     if (response.status === 401 || response.status === 403) throw new Error('This OpenF1 endpoint requires an access level that is not available to this request.');
+    if (response.status === 404 && endpoint === 'laps') throw new Error('OpenF1 has no lap records for this driver/session (404). Make sure the session has finished and timing data has been published, then choose another completed session.');
+    if (response.status === 404) throw new Error(`OpenF1 ${endpoint} endpoint was not found (404).`);
     if (response.status === 429) throw new Error('OpenF1 rate limit reached. Wait briefly before retrying.');
     throw new Error(`OpenF1 ${endpoint} request failed (${response.status}).`);
   }
