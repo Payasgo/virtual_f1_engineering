@@ -1,5 +1,5 @@
 import React,{useCallback,useEffect,useMemo,useRef,useState} from 'react';
-import {Gauge,BookOpen,Activity,Wind,CarFront,Flag,GraduationCap,Menu,X,ChevronRight,Radio,ArrowUpRight,CheckCircle2,Upload,Play,Target,Timer,Layers,Lightbulb,Info,Route,Trophy,MapPin,Radio} from 'lucide-react';
+import {Gauge,BookOpen,Activity,Wind,CarFront,Flag,GraduationCap,Menu,X,ChevronRight,ArrowUpRight,CheckCircle2,Upload,Play,Target,Timer,Layers,Lightbulb,Info,Route,Trophy,MapPin,Radio} from 'lucide-react';
 import {LineChart,Line,AreaChart,Area,XAxis,YAxis,Tooltip,CartesianGrid,ResponsiveContainer,BarChart,Bar} from 'recharts';
 
 const nav=[
