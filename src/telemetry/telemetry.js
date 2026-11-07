@@ -155,7 +155,7 @@ function parseCsvRows(text) {
     else if (char === '"') quoted = !quoted;
     else if (char === ',' && !quoted) { row.push(cell.trim()); cell = ''; }
     else if ((char === '\n' || char === '\r') && !quoted) {
-      if (char === '\\r' && text[i + 1] === '\\n') i++;
+      if (char === '\r' && text[i + 1] === '\n') i++;
       row.push(cell.trim()); cell = '';
       if (row.some(value => value !== '')) rows.push(row);
       row = [];
