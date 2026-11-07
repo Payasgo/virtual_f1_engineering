@@ -30,7 +30,10 @@ export default function App(){
  const [page,setPage]=useState('home'),[mobile,setMobile]=useState(false),[completed,setCompleted]=useState([]),[lesson,setLesson]=useState(0),[answers,setAnswers]=useState({}),[submitted,setSubmitted]=useState({}),[telemetry,setTelemetry]=useState(null),[lapA,setLapA]=useState('1'),[lapB,setLapB]=useState('2'),[error,setError]=useState(''),[wing,setWing]=useState(24),[speed,setSpeed]=useState(250),[rho,setRho]=useState(1.18),[mass,setMass]=useState(798),[mu,setMu]=useState(1.7),[corner,setCorner]=useState(110),[tyre,setTyre]=useState('medium'),[stint,setStint]=useState(25);
  const [raceDriverNo,setRaceDriverNo]=useState(''),[raceFeed,setRaceFeed]=useState({status:'idle',session:null,drivers:[],samples:[],updatedAt:null,error:''}),[raceAuto,setRaceAuto]=useState(false);
  const lastCarDate=useRef(null),lastFeedKey=useRef('');
- const active=nav.find(x=>x.id===page)||nav[0],progress=Math.round(completed.length/lessons.length*100);\n const latestLiveSample=raceFeed.samples.at(-1);\n const sampleAgeSeconds=latestLiveSample?Math.max(0,Math.round((Date.now()-new Date(latestLiveSample.date).getTime())/1000)):null;\n const isFreshLiveData=sampleAgeSeconds!==null&&sampleAgeSeconds<=30&&raceFeed.session&&new Date(raceFeed.session.date_end).getTime()>Date.now();
+ const active=nav.find(x=>x.id===page)||nav[0],progress=Math.round(completed.length/lessons.length*100);
+ const latestLiveSample=raceFeed.samples.at(-1);
+ const sampleAgeSeconds=latestLiveSample?Math.max(0,Math.round((Date.now()-new Date(latestLiveSample.date).getTime())/1000)):null;
+ const isFreshLiveData=sampleAgeSeconds!==null&&sampleAgeSeconds<=30&&raceFeed.session&&new Date(raceFeed.session.date_end).getTime()>Date.now();
  const data=telemetry?.data||demo,laps=telemetry?.laps||['1','2'];
  const chosenA=telemetry?data.filter(r=>r.lap===lapA):demo;
  const chosenB=telemetry?data.filter(r=>r.lap===lapB):demo.map((r,i)=>({...r,speed:Math.max(0,r.speed+(i%7-3)*3)}));
