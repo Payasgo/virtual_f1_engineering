@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { alignLaps, findBrakingZones, integrateDistance, parseTelemetryCsv, sectorComparison } from '../src/telemetry/telemetry.js';
+import { alignLaps, findBrakingZones, integrateDistance, normalizeTrack, parseTelemetryCsv, sectorComparison } from '../src/telemetry/telemetry.js';
 
 test('integrates speed over elapsed time into distance metres', () => {
   const result = integrateDistance([
@@ -47,4 +47,19 @@ test('detects a sustained braking event from brake channel', () => {
   assert.equal(events.length, 1);
   assert.equal(events[0].distance, 60);
   assert.equal(events[0].minSpeed, 100);
+});
+
+test('normalizes GPS coordinates without distorting circuit proportions', () => {
+  const track = normalizeTrack([
+    { x: 0, y: 0 },
+    { x: 50, y: 25 },
+    { x: 100, y: 50 },
+    { x: 100, y: 50 },
+    { x: NaN, y: 10 },
+  ]);
+  assert.equal(track.length, 3);
+  const width = Math.max(...track.map(p => p.x)) - Math.min(...track.map(p => p.x));
+  const height = Math.max(...track.map(p => p.y)) - Math.min(...track.map(p => p.y));
+  assert.ok(Math.abs(width / height - 2) < 0.01);
+  assert.ok(track.every(p => p.x >= 18 && p.x <= 282 && p.y >= 18 && p.y <= 182));
 });
