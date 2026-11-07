@@ -207,10 +207,38 @@ export function parseTelemetryCsv(text) {
   });
 }
 
-export function normalizeTrack(location) {
-  if (!location?.length) return [];
-  const minX = Math.min(...location.map(p => p.x)), maxX = Math.max(...location.map(p => p.x));
-  const minY = Math.min(...location.map(p => p.y)), maxY = Math.max(...location.map(p => p.y));
-  const span = Math.max(maxX - minX, maxY - minY) || 1;
-  return location.map(p => ({ x: 12 + ((p.x - minX) / span) * 276, y: 12 + ((maxY - p.y) / span) * 176 }));
+export function normalizeTrack(location, width = 300, height = 200, padding = 18) {
+  if (!Array.isArray(location) || location.length < 2) return [];
+  // OpenF1 location coordinates are circuit-local X/Y positions, not latitude/longitude.
+  // Keep their relative geometry intact and fit the complete path into the SVG viewport.
+  const valid = location.filter(p => Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y)))
+    .map(p => ({ x: Number(p.x), y: Number(p.y) }));
+  if (valid.length < 2) return [];
+
+  const points = valid.filter((p, i) => i === 0 ||
+    Math.hypot(p.x - valid[i - 1].x, p.y - valid[i - 1].y) > 0.01);
+  if (points.length < 2) return [];
+
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const p of points) {
+    minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+    minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+  }
+  const rangeX = maxX - minX, rangeY = maxY - minY;
+  if (rangeX === 0 && rangeY === 0) return [];
+
+  const availableWidth = Math.max(1, width - padding * 2);
+  const availableHeight = Math.max(1, height - padding * 2);
+  const scale = Math.min(
+    rangeX > 0 ? availableWidth / rangeX : Infinity,
+    rangeY > 0 ? availableHeight / rangeY : Infinity
+  );
+  const drawnWidth = rangeX * scale, drawnHeight = rangeY * scale;
+  const offsetX = (width - drawnWidth) / 2;
+  const offsetY = (height - drawnHeight) / 2;
+
+  return points.map(p => ({
+    x: Number((offsetX + (p.x - minX) * scale).toFixed(2)),
+    y: Number((height - offsetY - (p.y - minY) * scale).toFixed(2))
+  }));
 }
