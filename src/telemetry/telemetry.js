@@ -22,11 +22,12 @@ export const getLaps = (sessionKey, driverNumber, signal) =>
   request('laps', { session_key: String(sessionKey), driver_number: String(driverNumber) }, signal);
 
 export async function getLapSamples(sessionKey, driverNumber, lap, signal) {
-  if (!lap?.date_start || !Number.isFinite(Number(lap.duration))) {
+  const lapDuration = Number(lap?.lap_duration ?? lap?.duration);
+  if (!lap?.date_start || !Number.isFinite(lapDuration) || lapDuration <= 0) {
     throw new Error('This lap has no valid start timestamp or duration, so its telemetry cannot be queried reliably.');
   }
   const start = new Date(new Date(lap.date_start).getTime() - 250).toISOString();
-  const end = new Date(new Date(lap.date_start).getTime() + Number(lap.duration) * 1000 + 500).toISOString();
+  const end = new Date(new Date(lap.date_start).getTime() + lapDuration * 1000 + 500).toISOString();
   const params = {
     session_key: String(sessionKey),
     driver_number: String(driverNumber),
@@ -50,7 +51,7 @@ export async function getLapSamples(sessionKey, driverNumber, lap, signal) {
       gear: Number(row.n_gear),
       drs: row.drs,
     }))
-    .filter(row => row.t >= 0 && row.t <= Number(lap.duration) + 0.5);
+    .filter(row => row.t >= 0 && row.t <= lapDuration + 0.5);
   if (samples.length < 2) throw new Error('OpenF1 returned fewer than two car-data samples for this lap.');
   return {
     lap,
