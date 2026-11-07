@@ -117,8 +117,13 @@ export default function App(){
  };
  const loadDriverLaps=async()=>{
   if(!selectedSession||!selectedTelemetryDriver)return;
-  setTelemetryBusy(true);setTelemetryError('');
+  setTelemetryBusy(true);setTelemetryError('');setTelemetryNotice('');
   try{
+   const selectedSessionRecord=sessionCatalog.find(s=>String(s.session_key)===String(selectedSession));
+   const sessionEnd=Date.parse(selectedSessionRecord?.date_end||'');
+   if(!Number.isFinite(sessionEnd)||sessionEnd>Date.now()){
+    throw new Error('This session has not finished yet, so OpenF1 cannot provide completed lap records. Choose a session whose end time is in the past.');
+   }
    const rows=await getLaps(selectedSession,selectedTelemetryDriver);
    const valid=rows.map(l=>({...l,duration:Number(l.lap_duration??l.duration)})).filter(l=>l.date_start&&Number.isFinite(l.duration)&&l.duration>0&&!l.is_pit_out_lap&&!l.deleted);
    valid.sort((a,b)=>Number(a.lap_number)-Number(b.lap_number));
